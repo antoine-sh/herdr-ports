@@ -4,6 +4,7 @@ A [Herdr](https://herdr.dev) mod that lists the listening ports of a **remote sp
 
 - one row per TCP port that is listening on the machine the space runs on
 - a power button turns the ssh forward on or off
+- an **Auto** toggle forwards new ports as they appear
 - an open button launches `http://localhost:<port>` in your browser
 
 It follows the focused space, so it always shows the ports of the machine you are looking at.
@@ -29,7 +30,8 @@ It follows the focused space, so it always shows the ports of the machine you ar
 | Element | What it shows |
 |---|---|
 | 📌 **Header** | `Ports · <machine>`, the machine of the focused space. |
-| 🔢 **Port** | A listening TCP port. Bright when forwarded, muted otherwise. |
+| ⚙️ **Auto** | Toggle in the header. `Auto ✓` when on, remembered between sessions. |
+| 🔢 **Port** | A listening TCP port. Bright when forwarded, muted otherwise. Shown as `3000 → 24817` when forwarded to a different local port. |
 | ⏻ **Power** | Click to start or stop the forward. Green while on. |
 | 🌐 **Open** | Shown while forwarded. Opens `http://localhost:<port>`. |
 
@@ -39,6 +41,9 @@ Messages replace the list when there is nothing to show: `No open ports`, or `Lo
 
 - 🔁 **Live**: re-reads ports and forwards every 5 seconds, and when focus moves to a space on another machine.
 - 🔒 **Same port locally**: port `3000` on the remote is `localhost:3000` here.
+- 🎲 **Busy port**: if the local port is taken, a random free one (20000–59999) is used instead, shown as `3000 → 24817`, and a notification tells you where it went. The open button follows the mapping.
+- 🤖 **Auto-forward**: with `Auto` on, ports that appear after the panel first reads a machine are forwarded on their own. Ports already open at that first read are left alone. The setting is kept in `localStorage`.
+- 🧼 **Clean exit**: closing the panel (or Herdr) stops every forward the mod started.
 - 🧹 **Honest state**: "on" means an `ssh -L` process for that port and machine really exists, so forwards started elsewhere show up too.
 - ❌ **Failures are loud**: a forward that cannot start (for example, the local port is taken) posts an error notification.
 
@@ -96,9 +101,9 @@ herdr-app do mod.open --name ports
 
 1. The focused space's machine is read from `spaces()`. Its ssh target comes from `hc machine ls --json`.
 2. `ss -tlnH` runs on that machine through `exec(..., { on })`, and the local ports are parsed from it.
-3. Forwards are `ssh -f -N -o ExitOnForwardFailure=yes -L <port>:localhost:<port> <target>`. `-f` backgrounds ssh once the tunnel is up.
-4. Which forwards are on is found with `pgrep -fl` on that command line. Nothing is stored, so there is no state to go stale.
-5. Turning a forward off is `pkill` on the same command line.
+3. Forwards are `ssh -f -N -o ExitOnForwardFailure=yes -L <local>:localhost:<port> <target>`. `-f` backgrounds ssh once the tunnel is up. The same local port is tried first, then up to 5 random ones.
+4. Which forwards are on (and their local ports) is found with `pgrep -fl` on that command line. Nothing is stored, so there is no state to go stale.
+5. Turning a forward off is `pkill` on the same command line. On close, `pkill` removes all of them.
 
 ---
 
