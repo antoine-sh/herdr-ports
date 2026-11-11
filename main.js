@@ -11,6 +11,8 @@ export default class Ports extends View {
     this.ports = [];
     this.fwd = new Map();
     this.machine = null;
+    this.seen = null; // ports already known on this machine; null until the first read
+    try { this.auto = localStorage.getItem("autoForward") === "1"; } catch { this.auto = false; }
     cx.timer.every(5000, (cx) => this.refresh(cx));
     this.refresh(cx);
   }
@@ -20,7 +22,7 @@ export default class Ports extends View {
 
   refresh(cx) {
     const machine = activeMachine();
-    if (machine !== this.machine) { this.machine = machine; this.ports = []; this.fwd = new Map(); }
+    if (machine !== this.machine) { this.machine = machine; this.ports = []; this.fwd = new Map(); this.seen = null; }
     cx.spawn(async (cx) => {
       try {
         if (!machine) { this.error = "Local machine: nothing to forward"; return; }
@@ -29,6 +31,13 @@ export default class Ports extends View {
         this.ports = ports;
         this.target = await sshTarget(machine);
         this.fwd = await listForwards(this.target);
+        // Auto-forward ports that appeared since the last read (not the ones already open at first sight).
+        const fresh = this.seen ? ports.filter((p) => !this.seen.has(p) && !this.fwd.has(p)) : [];
+        this.seen = new Set(ports);
+        if (this.auto && fresh.length) {
+          for (const p of fresh) await this.start(p);
+          this.fwd = await listForwards(this.target);
+        }
         this.error = null;
       } catch (e) {
         this.error = String(e.message ?? e).split("\n")[0];
@@ -38,14 +47,22 @@ export default class Ports extends View {
     });
   }
 
+  async start(port) {
+    const local = await startForward(port, this.target);
+    if (local === null) notify({ title: `Forward ${port} failed`, level: "error" });
+    else if (local !== port) notify({ title: `Port ${port} busy`, body: `Forwarded to localhost:${local}` });
+  }
+
+  toggleAuto() {
+    this.auto = !this.auto;
+    try { localStorage.setItem("autoForward", this.auto ? "1" : "0"); } catch {}
+  }
+
   toggle(port, cx) {
     const turnOn = !this.fwd.has(port);
     cx.spawn(async (cx) => {
-      if (turnOn) {
-        const local = await startForward(port, this.target);
-        if (local === null) notify({ title: `Forward ${port} failed`, level: "error" });
-        else if (local !== port) notify({ title: `Port ${port} busy`, body: `Forwarded to localhost:${local}` });
-      } else await stopForward(port, this.target);
+      if (turnOn) await this.start(port);
+      else await stopForward(port, this.target);
       this.refresh(cx);
     });
   }
@@ -55,6 +72,8 @@ export default class Ports extends View {
     if (activeMachine() !== this.machine) this.refresh(cx);
     return panel({
       machine: this.machine,
+      auto: this.auto,
+      onAuto: (_e, cx) => { this.toggleAuto(); cx.notify(); },
       message: this.error || (this.ports.length ? null : "No open ports"),
       rows: this.ports.map((p) => portRow(p, this.fwd.get(p), {
         onToggle: (_e, cx) => this.toggle(p, cx),

@@ -18,11 +18,16 @@ export function portRow(port, local, { onToggle, onOpen }) {
     .when(on, (el) => el.child(iconButton(`open-${port}`, "open", t.muted, onOpen)));
 }
 
-export function panel({ machine, message, rows }) {
+export function panel({ machine, auto, onAuto, message, rows }) {
   const t = theme();
   return v_flex().size_full().bg(t.chrome)
     .child(h_flex().h(31).flex_none().pl(16).pr(10).items_center().text_size(11.5).text_color(t.dim)
-      .child(`Ports${machine ? " · " + machine : ""}`))
+      .child(div().flex_1().child(`Ports${machine ? " · " + machine : ""}`))
+      .child(div().id("auto-forward").px(6).py(2).rounded(4)
+        .text_color(auto ? t.working : t.dim)
+        .hover((s) => s.bg(t.hover))
+        .on_click(onAuto)
+        .child(auto ? "Auto ✓" : "Auto")))
     .child(message
       ? div().px(14).text_size(12).text_color(t.dim).child(message)
       : v_flex().flex_1().overflow_y_scrollbar().px(6).gap(1).children(rows));
