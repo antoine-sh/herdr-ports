@@ -9,10 +9,11 @@ const iconButton = (id, icon, color, onClick) =>
     .on_click(onClick)
     .child(svg(`mods/ports/${icon}.svg`).size(14).text_color(color));
 
-export function portRow(port, on, { onToggle, onOpen }) {
+export function portRow(port, local, { onToggle, onOpen }) {
   const t = theme();
+  const on = local != null;
   return h_flex().px(8).py(3).gap(8).items_center()
-    .child(div().text_size(13).text_color(on ? t.foreground : t.muted).child(String(port)))
+    .child(div().text_size(13).text_color(on ? t.foreground : t.muted).child(on && local !== port ? `${port} → ${local}` : String(port)))
     .child(iconButton(`port-${port}`, "power", on ? t.working : t.dim, onToggle))
     .when(on, (el) => el.child(iconButton(`open-${port}`, "open", t.muted, onOpen)));
 }

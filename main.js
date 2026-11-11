@@ -1,7 +1,7 @@
 // Listening ports on the active space's machine; click one to forward it to localhost over ssh.
 import { View } from "gpui-kit";
 import { spaces, notify } from "herdr";
-import { sshTarget, listPorts, listForwards, setForward, openInBrowser } from "./forwards.js";
+import { sshTarget, listPorts, listForwards, startForward, stopForward, openInBrowser } from "./forwards.js";
 import { panel, portRow } from "./ui.js";
 
 const activeMachine = () => spaces().find((s) => s.active)?.machine ?? null;
@@ -9,7 +9,7 @@ const activeMachine = () => spaces().find((s) => s.active)?.machine ?? null;
 export default class Ports extends View {
   init(_props, cx) {
     this.ports = [];
-    this.fwd = new Set();
+    this.fwd = new Map();
     this.machine = null;
     cx.timer.every(5000, (cx) => this.refresh(cx));
     this.refresh(cx);
@@ -17,7 +17,7 @@ export default class Ports extends View {
 
   refresh(cx) {
     const machine = activeMachine();
-    if (machine !== this.machine) { this.machine = machine; this.ports = []; this.fwd = new Set(); }
+    if (machine !== this.machine) { this.machine = machine; this.ports = []; this.fwd = new Map(); }
     cx.spawn(async (cx) => {
       try {
         if (!machine) { this.error = "Local machine: nothing to forward"; return; }
@@ -38,8 +38,11 @@ export default class Ports extends View {
   toggle(port, cx) {
     const turnOn = !this.fwd.has(port);
     cx.spawn(async (cx) => {
-      const code = await setForward(port, this.target, turnOn);
-      if (code && turnOn) notify({ title: `Forward ${port} failed`, level: "error" });
+      if (turnOn) {
+        const local = await startForward(port, this.target);
+        if (local === null) notify({ title: `Forward ${port} failed`, level: "error" });
+        else if (local !== port) notify({ title: `Port ${port} busy`, body: `Forwarded to localhost:${local}` });
+      } else await stopForward(port, this.target);
       this.refresh(cx);
     });
   }
@@ -50,9 +53,9 @@ export default class Ports extends View {
     return panel({
       machine: this.machine,
       message: this.error || (this.ports.length ? null : "No open ports"),
-      rows: this.ports.map((p) => portRow(p, this.fwd.has(p), {
+      rows: this.ports.map((p) => portRow(p, this.fwd.get(p), {
         onToggle: (_e, cx) => this.toggle(p, cx),
-        onOpen: () => openInBrowser(p),
+        onOpen: () => openInBrowser(this.fwd.get(p)),
       })),
     });
   }

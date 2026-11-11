@@ -19,20 +19,29 @@ export async function listPorts(machine) {
   return [...ports].sort((a, b) => a - b);
 }
 
-// Ports already forwarded to `target` (the forward command line doubles as the "is it on" probe).
+// Ports already forwarded to `target`: Map of remote port -> local port (the command line doubles as the probe).
 export async function listForwards(target) {
   const p = await sh("pgrep -fl 'ssh -f -N .*-L [0-9]+:localhost' || true");
-  return new Set([...p.stdout.matchAll(/-L (\d+):localhost:\d+ (\S+)/g)]
-    .filter((m) => m[2] === target).map((m) => +m[1]));
+  return new Map([...p.stdout.matchAll(/-L (\d+):localhost:(\d+) (\S+)/g)]
+    .filter((m) => m[3] === target).map((m) => [+m[2], +m[1]]));
 }
 
-// -f backgrounds ssh once the forward is up. Resolves to the exit code.
-export async function setForward(port, target, on) {
-  const cmd = on
-    ? `ssh -f -N -o ExitOnForwardFailure=yes -L ${port}:localhost:${port} ${target} </dev/null >/dev/null 2>&1`
-    : `pkill -f 'ssh -f -N .*-L ${port}:localhost:${port} ${target}$'`;
-  const r = await sh(cmd).catch(() => ({ code: 1 }));
-  return r.code;
+const forward = (local, port, target) =>
+  sh(`ssh -f -N -o ExitOnForwardFailure=yes -L ${local}:localhost:${port} ${target} </dev/null >/dev/null 2>&1`)
+    .then((r) => r.code).catch(() => 1);
+
+// -f backgrounds ssh once the forward is up. Tries the same local port, then random ones if it is taken.
+// Resolves to the local port, or null on failure.
+export async function startForward(port, target) {
+  if (!(await forward(port, port, target))) return port;
+  for (let i = 0; i < 5; i++) {
+    const local = 20000 + Math.floor(Math.random() * 40000);
+    if (!(await forward(local, port, target))) return local;
+  }
+  return null;
 }
+
+export const stopForward = (port, target) =>
+  sh(`pkill -f 'ssh -f -N .*-L [0-9]+:localhost:${port} ${target}$'`).catch(() => {});
 
 export const openInBrowser = (port) => exec("open", [`http://localhost:${port}`]);
