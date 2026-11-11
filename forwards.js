@@ -45,3 +45,7 @@ export const stopForward = (port, target) =>
   sh(`pkill -f 'ssh -f -N .*-L [0-9]+:localhost:${port} ${target}$'`).catch(() => {});
 
 export const openInBrowser = (port) => exec("open", [`http://localhost:${port}`]);
+
+// Kills every forward this mod started, on any machine.
+export const stopAllForwards = () =>
+  sh(`pkill -f 'ssh -f -N .*-L [0-9]+:localhost:[0-9]+ '`).catch(() => {});

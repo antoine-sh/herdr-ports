@@ -1,7 +1,7 @@
 // Listening ports on the active space's machine; click one to forward it to localhost over ssh.
 import { View } from "gpui-kit";
 import { spaces, notify } from "herdr";
-import { sshTarget, listPorts, listForwards, startForward, stopForward, openInBrowser } from "./forwards.js";
+import { sshTarget, listPorts, listForwards, startForward, stopForward, stopAllForwards, openInBrowser } from "./forwards.js";
 import { panel, portRow } from "./ui.js";
 
 const activeMachine = () => spaces().find((s) => s.active)?.machine ?? null;
@@ -14,6 +14,9 @@ export default class Ports extends View {
     cx.timer.every(5000, (cx) => this.refresh(cx));
     this.refresh(cx);
   }
+
+  // Forwards are detached ssh processes: end them when herdr (or this panel) closes.
+  async close() { await stopAllForwards(); }
 
   refresh(cx) {
     const machine = activeMachine();
