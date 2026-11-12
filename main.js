@@ -13,6 +13,7 @@ export default class Ports extends View {
     this.machine = null;
     this.seen = null; // ports already known on this machine; null until the first read
     try { this.auto = localStorage.getItem("autoForward") === "1"; } catch { this.auto = false; }
+    try { this.onlyFwd = localStorage.getItem("onlyFwd") === "1"; } catch { this.onlyFwd = false; }
     cx.timer.every(5000, (cx) => this.refresh(cx));
     this.refresh(cx);
   }
@@ -58,6 +59,11 @@ export default class Ports extends View {
     try { localStorage.setItem("autoForward", this.auto ? "1" : "0"); } catch {}
   }
 
+  toggleOnly() {
+    this.onlyFwd = !this.onlyFwd;
+    try { localStorage.setItem("onlyFwd", this.onlyFwd ? "1" : "0"); } catch {}
+  }
+
   toggle(port, cx) {
     const turnOn = !this.fwd.has(port);
     cx.spawn(async (cx) => {
@@ -70,12 +76,15 @@ export default class Ports extends View {
   render(cx) {
     // spaces() is live: re-run when the active space's machine changes.
     if (activeMachine() !== this.machine) this.refresh(cx);
+    const shown = this.onlyFwd ? this.ports.filter((p) => this.fwd.has(p)) : this.ports;
     return panel({
       machine: this.machine,
       auto: this.auto,
       onAuto: (_e, cx) => { this.toggleAuto(); cx.notify(); },
-      message: this.error || (this.ports.length ? null : "No open ports"),
-      rows: this.ports.map((p) => portRow(p, this.fwd.get(p), {
+      onlyFwd: this.onlyFwd,
+      onOnly: (_e, cx) => { this.toggleOnly(); cx.notify(); },
+      message: this.error || (shown.length ? null : this.ports.length ? "No forwarded ports" : "No open ports"),
+      rows: shown.map((p) => portRow(p, this.fwd.get(p), {
         onToggle: (_e, cx) => this.toggle(p, cx),
         onOpen: () => openInBrowser(this.fwd.get(p)),
       })),
